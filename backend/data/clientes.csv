@@ -1,0 +1,7 @@
+codigo,nombre,documento,telefono,correo,direccion,pais,provincia
+C001,Comercial Pérez SRL,131000111,809-555-1000,ventas@perez.com,Av. independencia 10,RD,Santo Domingo
+C002,comercial perez s.r.l.,131000111,(809) 555 1000,ventas@perez,AV independencia #10,Rep Dom,Sto Dgo
+C003,María Gómez,,8295552000,maria.gomez@email.com,Calle Duarte 22,republica dominicana,Santiago
+C003,Maria Gomeez,00112345678,+1 829 555 2000,maria.gomez@email.com,C/ Duarte #22,Dominican Republic,Santiago
+C005,Cliente Sin Datos,,,,,RD,
+
