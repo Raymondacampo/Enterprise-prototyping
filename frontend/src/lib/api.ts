@@ -1,5 +1,20 @@
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
+export async function homologateData(field: string, values: string[], catalog: string[]) {
+  const response = await fetch(`${API_BASE_URL}/homologate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field, values, catalog }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.detail || 'Error al ejecutar la homologación semántica.');
+  }
+
+  return response.json(); // Devuelve { proposals: [...] }
+}
+
 export async function parseFile(file: File) {
   const formData = new FormData();
   formData.append('file', file);

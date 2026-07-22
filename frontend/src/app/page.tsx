@@ -2,9 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import { parseFile, analyzeDataframe, applyChanges } from '@/lib/api';
+import { SemanticHomologator } from '@/components/SemanticHomologator'
 
 // --- Types ---
-type TabType = 'datos' | 'perfil' | 'duplicados' | 'cambios';
+type TabType = 'datos' | 'perfil' | 'duplicados' | 'cambios' | 'homologacion';
 
 interface ProposedChange {
   row: number;
@@ -285,6 +286,12 @@ export default function Home() {
                   count={analysis?.proposed_changes?.length}
                   badgeColor={analysis?.proposed_changes?.length ? 'indigo' : 'default'}
                 />
+                <TabButton
+                  active={activeTab === 'homologacion'}
+                  onClick={() => setActiveTab('homologacion')}
+                  label="Homologación IA"
+                  badgeColor="indigo"
+                />
               </div>
 
               {activeTab === 'cambios' && analysis?.proposed_changes?.length > 0 && (
@@ -343,6 +350,14 @@ export default function Home() {
                   ) : (
                     <EmptyState message="El modelo no detectó anomalías que requieran ajustes automáticos." />
                   )}
+                </div>
+              )}
+              {activeTab === 'homologacion' && fileData && (
+                <div className="p-6">
+                  <SemanticHomologator 
+                    columns={fileData.columns || Object.keys(fileData.data[0] || {})} 
+                    data={fileData.data} 
+                  />
                 </div>
               )}
             </div>
