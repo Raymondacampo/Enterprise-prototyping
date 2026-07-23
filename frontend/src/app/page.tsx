@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { parseFile, analyzeDataframe, applyChanges } from '@/lib/api';
+import { parseFile, analyzeDataframe, applyChanges, parseSQLFile } from '@/lib/api';
 import { SemanticHomologator } from '@/components/SemanticHomologator'
+import { DBConnectorModal } from '@/components/DBConnectorModal';
 
 // --- Types ---
 type TabType = 'datos' | 'perfil' | 'duplicados' | 'cambios' | 'homologacion';
@@ -87,33 +88,64 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [fileName, setFileName] = useState<string>('');
-  const [selectedChanges, setSelectedChanges] = useState<number[]>([]);
+  const [isDBModalOpen, setIsDBModalOpen] = useState(false);
+  const [isDBData, setIsDBData] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('datos');
+  const [selectedChanges, setSelectedChanges] = useState<number[]>([]);
 
-  // Handle File Upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processLoadedData = async (parsed: any, sourceName: string, isFromDB = false) => {
+    setFileName(sourceName);
+    setIsDBData(isFromDB);
+    setFileData(parsed);
 
-    setFileName(file.name);
     setLoading(true);
     try {
-      const parsed = await parseFile(file);
-      setFileData(parsed);
-
       const jsonString = JSON.stringify(parsed.data);
       const resAnalysis = await analyzeDataframe(jsonString);
       setAnalysis(resAnalysis);
-      
-      // Auto-select all suggested changes by default for high efficiency
       if (resAnalysis?.proposed_changes) {
         setSelectedChanges(resAnalysis.proposed_changes.map((_: any, i: number) => i));
       }
     } catch (err) {
-      alert('Error procesando el archivo en el backend.');
-      console.error(err);
+      alert('Error analizando datos.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      let parsed;
+      if (file.name.endsWith('.sql')) {
+        parsed = await parseSQLFile(file);
+        // Marcamos como origen SQL para habilitar la descarga del script corregido
+        await processLoadedData(parsed, `${file.name} (${parsed.selected_table})`, true);
+      } else {
+        parsed = await parseFile(file);
+        await processLoadedData(parsed, file.name, false);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error cargando archivo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadSQL = async () => {
+    if (!analysis?.proposed_changes || !selectedChanges.length) return;
+    try {
+      const res = await generateSQLScript(fileName, analysis.proposed_changes, selectedChanges);
+      const blob = new Blob([res.sql], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `limpieza_${fileName}.sql`;
+      a.click();
+    } catch (err) {
+      alert('Error generando script SQL');
     }
   };
 
@@ -149,7 +181,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+<main className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
       {/* Top Header Banner */}
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -173,41 +205,56 @@ export default function Home() {
           {fileName && (
             <div className="flex items-center gap-3 bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-lg text-xs">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="text-slate-400">Archivo activo:</span>
+              <span className="text-slate-400">Origen activo:</span>
               <span className="font-mono font-medium text-slate-200">{fileName}</span>
+              {isDBData && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded uppercase">
+                  SQL Table
+                </span>
+              )}
             </div>
           )}
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Upload Zone */}
+        {/* Upload Zone & DB Connection */}
         <section className="relative overflow-hidden bg-gradient-to-b from-slate-900/80 to-slate-900/40 border border-slate-800/80 rounded-2xl p-8 transition-all duration-200 hover:border-slate-700">
           <div className="max-w-xl mx-auto text-center space-y-4">
             <div className="inline-flex p-4 bg-slate-800/60 border border-slate-700/50 rounded-2xl text-indigo-400 shadow-inner">
               <IconUpload className="w-8 h-8" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-200">Cargar conjunto de datos</h2>
+              <h2 className="text-lg font-semibold text-slate-200">Cargar conjunto de datos o conectar BD</h2>
               <p className="text-sm text-slate-400 mt-1">
-                Soporta archivos <code className="text-indigo-300 font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">.CSV</code> y <code className="text-indigo-300 font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">.XLSX</code> para diagnóstico instantáneo
+                Soporta archivos <code className="text-indigo-300 font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">.CSV</code>, <code className="text-indigo-300 font-mono text-xs bg-slate-800 px-1.5 py-0.5 rounded">.XLSX</code> o conexión directa a bases de datos SQL
               </p>
             </div>
 
-            <div className="relative inline-block mt-2">
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileUpload}
-                id="file-upload"
-                className="hidden"
-              />
-              <label
-                htmlFor="file-upload"
-                className="cursor-pointer inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-medium shadow-lg shadow-indigo-500/25 transition-all active:scale-95"
+            <div className="flex items-center justify-center gap-3 flex-wrap mt-2">
+              <div className="relative inline-block">
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls,.sql"
+                  onChange={handleFileUpload}
+                  id="file-upload"
+                  className="hidden"
+                />
+                <label
+                  htmlFor="file-upload"
+                  className="cursor-pointer inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-medium shadow-lg shadow-indigo-500/25 transition-all active:scale-95"
+                >
+                  <span>Seleccionar archivo local</span>
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDBModalOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 text-slate-200 text-sm font-medium shadow-md transition-all active:scale-95"
               >
-                <span>Seleccionar archivo local</span>
-              </label>
+                <span>🔌 Conectar Base de Datos</span>
+              </button>
             </div>
 
             {loading && (
@@ -304,6 +351,17 @@ export default function Home() {
                       ? 'Deseleccionar todos'
                       : 'Seleccionar todos'}
                   </button>
+
+                  {isDBData && (
+                    <button
+                      onClick={handleDownloadSQL}
+                      disabled={selectedChanges.length === 0}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-all"
+                    >
+                      📥 Descargar Script SQL
+                    </button>
+                  )}
+
                   <button
                     onClick={handleApplyChanges}
                     disabled={applying || selectedChanges.length === 0}
@@ -352,6 +410,7 @@ export default function Home() {
                   )}
                 </div>
               )}
+
               {activeTab === 'homologacion' && fileData && (
                 <div className="p-6">
                   <SemanticHomologator 
@@ -364,8 +423,15 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Modal de Conexión a Base de Datos */}
+      <DBConnectorModal
+        isOpen={isDBModalOpen}
+        onClose={() => setIsDBModalOpen(false)}
+        onTableLoaded={(res, tableName) => processLoadedData(res, tableName, true)}
+      />
     </main>
-  );
+    );
 }
 
 // --- Component: Metric Card ---
@@ -462,7 +528,7 @@ function EnhancedDataTable({ data, highlightRow }: { data: any[]; highlightRow?:
       {/* Search & Stats Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-2">
         <div className="relative w-full sm:w-72">
-          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
           <input
             type="text"
             value={searchTerm}
@@ -669,7 +735,7 @@ function ProposedChangesList({
                   <div className="bg-red-500/10 border border-red-500/20 text-red-300 px-3 py-1.5 rounded-lg line-through truncate max-w-[200px]">
                     {String(item.original ?? 'empty')}
                   </div>
-                  <IconArrowRight className="text-slate-500 flex-shrink-0" />
+                  <IconArrowRight className="text-slate-500 h-4 w-4" />
                   <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg font-medium truncate max-w-[200px]">
                     {String(item.proposed)}
                   </div>
