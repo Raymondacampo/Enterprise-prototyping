@@ -80,16 +80,65 @@ async def parse_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def format_duplicates_summary(df: pd.DataFrame, raw_duplicates: list) -> list:
+    summary = []
+    
+    if not isinstance(raw_duplicates, list):
+        return []
+
+    for item in raw_duplicates:
+        try:
+            row_a = int(item["row_a"])
+            row_b = int(item["row_b"])
+            
+            # 1. Obtener ID de forma segura
+            if "id" in df.columns:
+                val_a = df.at[row_a, "id"]
+                val_b = df.at[row_b, "id"]
+                # Convertir tipos de pandas (numpy) a int/str nativos de Python
+                id_a = str(val_a) if pd.notna(val_a) else row_a
+                id_b = str(val_b) if pd.notna(val_b) else row_b
+            else:
+                id_a, id_b = row_a, row_b
+
+            # 2. Convertir 'evidence' a una lista de cadenas limpias
+            raw_evidence = item.get("evidence", [])
+            if isinstance(raw_evidence, (list, tuple, pd.Series)):
+                fields = [str(f) for f in raw_evidence]
+            else:
+                fields = [str(raw_evidence)]
+
+            fields_str = ", ".join([f"'{f}'" for f in fields]) if fields else "datos"
+            message = f"Las filas con ID {id_a} y {id_b} tienen el campo {fields_str} duplicado."
+
+            # 3. Construir el objeto asegurando tipos nativos
+            summary.append({
+                "ids": [id_a, id_b],
+                "message": message,
+                "conflicting_fields": fields,
+                "confidence": int(item.get("confidence", 100)),
+                "master_suggestion": item.get("master_suggestion")
+            })
+        except Exception as e:
+            # Si falla un registro individual, continuar con el resto
+            print(f"Error procesando duplicado individual: {e}")
+            continue
+            
+    return summary
+
 @app.post("/api/analyze")
 async def analyze_dataframe(df_json: str = Form(...)):
     try:
         df = pd.read_json(io.StringIO(df_json))
+        raw_dups = duplicates(df)
+        formatted_dups = format_duplicates_summary(df, raw_dups)
         return {
             "profile": profile(df),
-            "duplicates": duplicates(df),
+            "duplicates": formatted_dups,
             "proposed_changes": propose(df)
         }
     except Exception as e:
+        print(f"Error en /api/analyze: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/apply-changes")
@@ -129,7 +178,7 @@ async def homologate_semantic(payload: HomologateRequest):
 async def test_database_connection(config: DBConnectionConfig):
     """Conecta a la BD del cliente y lista las tablas disponibles."""
     try:
-        tables = db.test_db_connection(config.dict())
+        tables = db.test_db_connection(config.model_dump())
         return {"status": "success", "tables": tables}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error de conexión: {str(e)}")
@@ -138,7 +187,7 @@ async def test_database_connection(config: DBConnectionConfig):
 async def fetch_database_table(payload: DBFetchTableRequest):
     """Extrae los registros de una tabla para analizarlos en la app."""
     try:
-        df = db.fetch_table_data(payload.config.dict(), payload.table_name, payload.limit)
+        df = db.fetch_table_data(payload.config.model_dump(), payload.table_name, payload.limit or 500)
         q_metrics = quality(df)
         return {
             "table_name": payload.table_name,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { parseFile, analyzeDataframe, applyChanges, parseSQLFile } from '@/lib/api';
+import { parseFile, analyzeDataframe, applyChanges, parseSQLFile, generateSQLScript } from '@/lib/api';
 import { SemanticHomologator } from '@/components/SemanticHomologator'
 import { DBConnectorModal } from '@/components/DBConnectorModal';
 
@@ -181,7 +181,7 @@ export default function Home() {
   };
 
   return (
-<main className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <main className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
       {/* Top Header Banner */}
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -194,7 +194,7 @@ export default function Home() {
                 <h1 className="text-xl font-bold tracking-tight text-white">Enterprise Data Preparation AI</h1>
                 <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full uppercase tracking-wider">
                   MVP Auditable
-                </span>
+                </span><button onClick={() => console.log(analysis)}>Imprimir análisis</button>
               </div>
               <p className="text-slate-400 text-xs mt-0.5">
                 Preservación de datos originales · Protocolo de verificación humana
@@ -362,13 +362,13 @@ export default function Home() {
                     </button>
                   )}
 
-                  <button
+                  {/* <button
                     onClick={handleApplyChanges}
                     disabled={applying || selectedChanges.length === 0}
                     className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium transition-all"
                   >
                     {applying ? 'Aplicando...' : `Aplicar (${selectedChanges.length})`}
-                  </button>
+                  </button> */}
                 </div>
               )}
             </div>
@@ -544,6 +544,7 @@ function EnhancedDataTable({ data, highlightRow }: { data: any[]; highlightRow?:
         <div className="text-xs text-slate-400 font-mono">
           Mostrando <span className="text-slate-200 font-semibold">{paginatedData.length}</span> de{' '}
           <span className="text-slate-200 font-semibold">{filteredData.length}</span> filas
+          <button onClick={() => console.log(data, highlightRow)}>imprimir</button>
         </div>
       </div>
 
@@ -629,15 +630,19 @@ function ProfileView({ profileData }: { profileData: any[] }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {profileData.map((item: any, idx: number) => {
-        const nullPercentage = item.null_percentage || 0;
-        const completeness = 100 - nullPercentage;
+        const rows = Number(item.rows) || 0;
+        const nulls = Number(item.nulls) || 0;
+        const nullPercentage = rows > 0 ? Number(((nulls / rows) * 100).toFixed(2)) : 0;
+        const completeness = typeof item.completeness === 'number'
+          ? item.completeness
+          : Number((100 - nullPercentage).toFixed(2));
 
         return (
           <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
               <span className="font-semibold text-sm text-slate-200 truncate">{item.column || item.columna}</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-indigo-400 border border-slate-700/50">
-                {item.type || item.tipo || 'String'}
+                {item.dtype || item.type || item.tipo || 'String'}
               </span>
             </div>
 
@@ -662,8 +667,8 @@ function ProfileView({ profileData }: { profileData: any[] }) {
 
             <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
               <div className="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
-                <span className="text-slate-500 block">Valores Nulos</span>
-                <span className="font-mono text-slate-300 font-semibold">{item.nulls ?? item.nulos ?? 0}</span>
+                <span className="text-slate-500 block">Nulos (%)</span>
+                <span className="font-mono text-slate-300 font-semibold">{item.nulls}</span>
               </div>
               <div className="bg-slate-900 p-2 rounded-lg border border-slate-800/50">
                 <span className="text-slate-500 block">Valores Únicos</span>

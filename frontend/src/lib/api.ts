@@ -41,12 +41,30 @@ export async function analyzeDataframe(dfJson: string) {
   return res.json();
 }
 
-export async function applyChanges(dfJson: string, changes: any[], acceptedIndices: number[]) {
+// export async function applyChanges(dfJson: JSON.stringify(datasetArray), changes: any[], acceptedIndices: number[]) {
+//   const res = await fetch(`${API_BASE_URL}/apply-changes`, {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json' },
+//     body: JSON.stringify({
+//       df_json: dfJson,
+//       changes,
+//       accepted_indices: acceptedIndices,
+//     }),
+//   });
+
+//   if (!res.ok) throw new Error('Error al aplicar los cambios');
+//   return res.json();
+// }
+export async function applyChanges(
+  datasetArray: any[], // <--- Recibe el array directamente
+  changes: any[], 
+  acceptedIndices: number[]
+) {
   const res = await fetch(`${API_BASE_URL}/apply-changes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      df_json: dfJson,
+      df_json: JSON.stringify(datasetArray), // <--- La conversión se hace aquí adentro
       changes,
       accepted_indices: acceptedIndices,
     }),
@@ -55,7 +73,6 @@ export async function applyChanges(dfJson: string, changes: any[], acceptedIndic
   if (!res.ok) throw new Error('Error al aplicar los cambios');
   return res.json();
 }
-
 // --- CONEXIONES A BASE DE DATOS ---
 
 export async function testDBConnection(config: any) {
