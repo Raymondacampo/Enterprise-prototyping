@@ -55,17 +55,48 @@ def duplicates(df: pd.DataFrame, threshold:int=82) -> list[dict]:
             if score>=threshold: pairs.append({"row_a":i,"row_b":j,"confidence":score,"evidence":cols,"master_suggestion":i})
     return pairs
 
-def propose(df: pd.DataFrame) -> list[dict]:
-    changes=[]
-    for i,row in df.iterrows():
-        for c,v in row.items():
-            old="" if pd.isna(v) else str(v); new=old; rule=""
-            lc=c.lower()
-            if "telefono" in lc or "phone" in lc: new=normalize_phone(old); rule="PHONE_E164_RD"
-            elif "pais" in lc or "country" in lc: new=COUNTRY.get(norm_text(old),old.strip()); rule="COUNTRY_MASTER"
-            elif "unidad" in lc or "unit" in lc: new=UNIT.get(norm_text(old),old.strip().upper()); rule="UNIT_MASTER"
-            elif any(k in lc for k in ("nombre","name","razon","direccion","address")): new=" ".join(x.capitalize() for x in old.split()); rule="TEXT_CASE"
-            if new!=old: changes.append({"row":int(i),"column":c,"original":old,"proposed":new,"rule":rule,"confidence":1.0,"status":"pending","source":"deterministic"})
+# def propose(df: pd.DataFrame) -> list[dict]:
+#     changes=[]
+#     for i,row in df.iterrows():
+#         for c,v in row.items():
+#             old="" if pd.isna(v) else str(v); new=old; rule=""
+#             lc=str(c).lower()
+#             if "telefono" in lc or "phone" in lc: new=normalize_phone(old); rule="PHONE_E164_RD"
+#             elif "pais" in lc or "country" in lc: new=COUNTRY.get(norm_text(old),old.strip()); rule="COUNTRY_MASTER"
+#             elif "unidad" in lc or "unit" in lc: new=UNIT.get(norm_text(old),old.strip().upper()); rule="UNIT_MASTER"
+#             elif any(k in lc for k in ("nombre","name","razon","direccion","address")): new=" ".join(x.capitalize() for x in old.split()); rule="TEXT_CASE"
+#             if new!=old: changes.append({"row":int(i),"column":str(c),"original":old,"proposed":new,"rule":rule,"confidence":1.0,"status":"pending","source":"deterministic"})
+#     return changes
+
+def propose(df: pd.DataFrame) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    for i, row in df.iterrows():  # i is a Hashable index label
+        for c, v in row.items():
+            old = "" if pd.isna(v) else str(v)
+            new = old
+            rule = ""
+            lc = str(c).lower()
+
+            if "telefono" in lc or "phone" in lc:
+                new = normalize_phone(old); rule = "PHONE_E164_RD"
+            elif "pais" in lc or "country" in lc:
+                new = COUNTRY.get(norm_text(old), old.strip()); rule = "COUNTRY_MASTER"
+            elif "unidad" in lc or "unit" in lc:
+                new = UNIT.get(norm_text(old), old.strip().upper()); rule = "UNIT_MASTER"
+            elif any(k in lc for k in ("nombre", "name", "razon", "direccion", "address")):
+                new = " ".join(x.capitalize() for x in old.split()); rule = "TEXT_CASE"
+
+            if new != old:
+                changes.append({
+                    "row": i,  # keep original index type
+                    "column": str(c),
+                    "original": old,
+                    "proposed": new,
+                    "rule": rule,
+                    "confidence": 1.0,
+                    "status": "pending",
+                    "source": "deterministic",
+                })
     return changes
 
 def apply_changes(df:pd.DataFrame, changes:list[dict], accepted:set[int]) -> tuple[pd.DataFrame,pd.DataFrame]:
